@@ -53,10 +53,10 @@ object Bot {
       //      val changes = List.fill(changesRequested)("❌")
       approvals.mkString(" ")
     } else {
-      val requiredReviews = List.fill(2 - approved)("⚪️")
+      val requiredReviews = List.fill(2 - approved)("⬜")
       val approvals = List.fill(approved)("✅")
       //      val changes = List.fill(changesRequested)("❌")
-      (requiredReviews ::: approvals).mkString(" ")
+      (approvals ::: requiredReviews).mkString(" ")
     }
 
   def buildReviews(as: List[Issue]): List[String] =
