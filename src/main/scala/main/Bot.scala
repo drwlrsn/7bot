@@ -1,4 +1,7 @@
+package main
+
 import akka.actor.ActorSystem
+import cats.Id
 import github4s.Github
 import github4s.Github._
 import github4s.free.domain._
@@ -23,8 +26,8 @@ object Bot {
     val selfId = client.state.self.id
 
     client.onMessage { message =>
-      val isDirectMessage: Boolean = SlackUtil.isDirectMsg(message)
-      if (isDirectMessage && message.user != selfId)
+      //      val isDirectMessage: Boolean = SlackUtil.isDirectMsg(message)
+      if (message.user != selfId)
         client.sendMessage(
           message.channel,
           callCommand(parseCommand(message.text))
@@ -44,18 +47,57 @@ object Bot {
     }
   }
 
-  def buildPullRequests(prs: List[Issue]): String =
-    if (prs.isEmpty) "Could not find any open PRs"
-    else prs.foldLeft("")((titleStr, issue) => titleStr + issue.title + "\n")
+  def buildReviewStateStr(approved: Int): String =
+    if (approved > 1) {
+      val approvals = List.fill(if (approved > 2) 2 else approved)("✅")
+      //      val changes = List.fill(changesRequested)("❌")
+      approvals.mkString(" ")
+    } else {
+      val requiredReviews = List.fill(2 - approved)("⚪️")
+      val approvals = List.fill(approved)("✅")
+      //      val changes = List.fill(changesRequested)("❌")
+      (requiredReviews ::: approvals).mkString(" ")
+    }
 
-  def getPullRequests2(team: String): String = {
+  def buildReviews(as: List[Issue]): List[String] =
+    getReviews(as).foldLeft(List[String]())((xs: List[String], r: Review) =>
+      (buildReviewStateStr(r.approved) :: r.url :: " – " + r.title :: Nil).mkString(" ") :: xs)
+
+  private def getReviews(as: List[Issue]): List[Review] = {
+    val prLists = for (a: Issue <- as if a.state == "open")
+      yield // Factor this out into a different method and return `main.Review`
+      Github(Option(accessToken)).pullRequests
+      .listReviews("7shifts", "webapp", a.number)
+      .exec[Id, HttpResponse[String]]() match {
+        case Left(exception) => throw exception
+        case Right(r) =>
+          Review(
+            a.html_url,
+            a.title,
+            r.result.count(p => p.state == PRRStateApproved),
+            r.result.count(p => p.state == PRRStateChangesRequested),
+            a.updated_at,
+            a.created_at,
+            a.closed_at,
+            a.labels
+          )
+      }
+
+    prLists
+  }
+
+  def buildPullRequests(as: List[Issue]): String =
+    if (as.isEmpty) "Could not find any open PRs"
+    else buildReviews(as).mkString("\n")
+
+  def getPullRequests(team: String): String = {
     val listPullRequests = Github(Option(accessToken)).issues.searchIssues(
       "",
       List(
         OwnerParamInRepository("7shifts/webapp"),
         IssueTypePullRequest,
         IssueStateOpen,
-        LabelParam(label = team, exclude = false),
+        LabelParam(team),
         SearchIn(Set(SearchInTitle))
       )
     )
@@ -82,8 +124,7 @@ object Bot {
   }
 
   def parseTeam(l: List[String]): String = l.head match {
-    case rest => getPullRequests2(rest.split(" ")(0))
-    case _ => throw new IllegalArgumentException("Team missing from arguments")
+    case rest => getPullRequests(rest.split(" ")(0))
   }
 
 }
