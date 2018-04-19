@@ -15,10 +15,10 @@ import scala.concurrent.ExecutionContextExecutor
 
 object Bot {
   val dmChannels: mutable.MutableList[String] = mutable.MutableList[String]()
-  val accessToken = sys.env("7BOT_GITHUB_TOKEN")
+  val accessToken = sys.env("BOT_GITHUB_TOKEN")
 
   def main(args: Array[String]): Unit = {
-    val slackToken = sys.env("7BOT_SLACK_TOKEN")
+    val slackToken = sys.env("BOT_SLACK_TOKEN")
     implicit val system: ActorSystem = ActorSystem("slack")
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
