@@ -72,6 +72,7 @@ object Bot {
           .mkString(" ") :: xs)
 
   private def getReviews(as: List[Issue]): List[Review] = {
+    // I am pretty sure we could use fs2.async.parallelTraverse to do these concurrently
     val prLists = for (a: Issue <- as if a.state == "open")
       yield // Factor this out into a different method and return `main.Review`
       Github(Option(accessToken)).pullRequests
