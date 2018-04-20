@@ -47,17 +47,20 @@ object Bot {
     }
   }
 
-  def buildReviewStateStr(approved: Int, changesRequested: Int): String =
-    if (approved > 1) {
-      val approvals = List.fill(if (approved > 2) 2 else approved)("✅")
-      val changes   = List.fill(changesRequested)("❌")
-      (approvals ::: changes).mkString(" ")
+  def buildReviewStateStr(r: Review): String = {
+    val slots            = 2
+    val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" else "⚪️") :: Nil
+    if (r.approved > slots - 1) {
+      val approvals = List.fill(if (r.approved > slots) slots else r.approved)("✅")
+      val changes   = List.fill(r.changes)("❌")
+      (approvals ::: changes ::: qa).mkString(" ")
     } else {
-      val requiredReviews = List.fill(2 - approved - changesRequested)("⬜")
-      val approvals       = List.fill(approved)("✅")
-      val changes         = List.fill(changesRequested)("❌")
-      (approvals ::: changes ::: requiredReviews).mkString(" ")
+      val requiredReviews = List.fill(slots - r.approved - r.changes)("⬜")
+      val approvals       = List.fill(r.approved)("✅")
+      val changes         = List.fill(r.changes)("❌")
+      (approvals ::: changes ::: requiredReviews ::: qa).mkString(" ")
     }
+  }
 
   def buildTitle(r: Review): String =
     if (r.labels.map(_.name).contains("PRIORITY")) "🚨 *" + r.title + "* 🚨" else r.title
@@ -65,7 +68,7 @@ object Bot {
   def buildReviews(as: List[Issue]): List[String] =
     getReviews(as).foldLeft(List[String]())(
       (xs: List[String], r: Review) =>
-        (buildReviewStateStr(r.approved, r.changes) :: r.url :: " – " + buildTitle(r) :: Nil)
+        (buildReviewStateStr(r) :: r.url :: " – " + buildTitle(r) :: Nil)
           .mkString(" ") :: xs)
 
   private def getReviews(as: List[Issue]): List[Review] = {
