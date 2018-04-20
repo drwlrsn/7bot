@@ -16,6 +16,7 @@ import scala.concurrent.ExecutionContextExecutor
 object Bot {
   val dmChannels: mutable.MutableList[String] = mutable.MutableList[String]()
   val accessToken                             = sys.env("BOT_GITHUB_TOKEN")
+  val techLeads                               = List("padge", "unrolled", "raulchedrese")
 
   def main(args: Array[String]): Unit = {
     val slackToken                            = sys.env("BOT_SLACK_TOKEN")
@@ -47,18 +48,26 @@ object Bot {
     }
   }
 
+  def buildTechLeadApproval(approved: Boolean): List[String] =
+    if (approved) {
+      List.fill(1)("✨")
+    } else {
+      List.fill(1)("⚪")
+    }
+
   def buildReviewStateStr(r: Review): String = {
     val slots            = 2
     val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" else "⚪️") :: Nil
+    val tla = buildTechLeadApproval(r.techLeadApproval);
     if (r.approved > slots - 1) {
       val approvals = List.fill(if (r.approved > slots) slots else r.approved)("✅")
       val changes   = List.fill(r.changes)("❌")
-      (approvals ::: changes ::: qa).mkString(" ")
+      (approvals ::: changes ::: tla ::: qa).mkString(" ")
     } else {
       val requiredReviews = List.fill(slots - r.approved - r.changes)("⬜")
       val approvals       = List.fill(r.approved)("✅")
       val changes         = List.fill(r.changes)("❌")
-      (approvals ::: changes ::: requiredReviews ::: qa).mkString(" ")
+      (approvals ::: changes ::: requiredReviews ::: tla ::: qa).mkString(" ")
     }
   }
 
@@ -86,6 +95,7 @@ object Bot {
             a.title,
             filteredReviews.count(p => p.state == PRRStateApproved),
             filteredReviews.count(p => p.state == PRRStateChangesRequested),
+            filteredReviews.exists(fr => techLeads.contains(fr.user.get.login) && fr.state == PRRStateApproved),
             a.updated_at,
             a.created_at,
             a.closed_at,
