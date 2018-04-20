@@ -59,9 +59,14 @@ object Bot {
       (approvals ::: changes ::: requiredReviews).mkString(" ")
     }
 
+  def buildTitle(r: Review): String =
+    if (r.labels.map(_.name).contains("PRIORITY")) "🚨 *" + r.title + "* 🚨" else r.title
+
   def buildReviews(as: List[Issue]): List[String] =
-    getReviews(as).foldLeft(List[String]())((xs: List[String], r: Review) =>
-      (buildReviewStateStr(r.approved, r.changes) :: r.url :: " – " + r.title :: Nil).mkString(" ") :: xs)
+    getReviews(as).foldLeft(List[String]())(
+      (xs: List[String], r: Review) =>
+        (buildReviewStateStr(r.approved, r.changes) :: r.url :: " – " + buildTitle(r) :: Nil)
+          .mkString(" ") :: xs)
 
   private def getReviews(as: List[Issue]): List[Review] = {
     val prLists = for (a: Issue <- as if a.state == "open")
