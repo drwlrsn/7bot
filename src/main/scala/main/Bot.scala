@@ -108,7 +108,9 @@ object Bot {
 
   def filterUserReviews(as: List[PullRequestReview]): List[PullRequestReview] = {
     val mappedByUser: Map[Option[User], List[PullRequestReview]] =
-      as.filter(_.user.nonEmpty).groupBy(_.user)
+      as.filter(_.user.nonEmpty)
+        .filter(p => p.state == PRRStateChangesRequested || p.state == PRRStateApproved)
+        .groupBy(_.user)
 
     mappedByUser.foldLeft(List[PullRequestReview]())((xs, kv) => {
       kv._2.sortBy(_.id).reverse.head :: xs
