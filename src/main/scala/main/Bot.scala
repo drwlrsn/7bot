@@ -1,5 +1,7 @@
 package main
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import cats.Id
 import github4s.Github
@@ -12,6 +14,7 @@ import slack.rtm.SlackRtmClient
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.duration.FiniteDuration
 
 object Bot {
   val dmChannels: mutable.MutableList[String] = mutable.MutableList[String]()
@@ -23,7 +26,7 @@ object Bot {
     implicit val system: ActorSystem          = ActorSystem("slack")
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
-    val client = SlackRtmClient(slackToken)
+    val client = SlackRtmClient(slackToken, new FiniteDuration(30, TimeUnit.SECONDS))
     val selfId = client.state.self.id
 
     client.onMessage { message =>
