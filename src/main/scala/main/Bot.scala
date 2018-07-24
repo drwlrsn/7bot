@@ -9,36 +9,52 @@ import github4s.Github._
 import github4s.free.domain._
 import github4s.jvm.Implicits._
 import scalaj.http.HttpResponse
-import slack.SlackUtil
+import slack.api.SlackApiClient
 import slack.rtm.SlackRtmClient
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object Bot {
   val dmChannels: mutable.MutableList[String] = mutable.MutableList[String]()
   val accessToken                             = sys.env("BOT_GITHUB_TOKEN")
   val techLeads                               = List("padge", "unrolled", "raulchedrese")
+  var prevMessages: Map[String, String]       = Map()
+  implicit val system: ActorSystem            = ActorSystem("slack")
+  implicit val ec: ExecutionContextExecutor   = system.dispatcher
 
   def main(args: Array[String]): Unit = {
-    val slackToken                            = sys.env("BOT_SLACK_TOKEN")
-    implicit val system: ActorSystem          = ActorSystem("slack")
-    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    val slackToken = sys.env("BOT_SLACK_TOKEN")
 
-    val client = SlackRtmClient(slackToken, new FiniteDuration(30, TimeUnit.SECONDS))
-    val selfId = client.state.self.id
+    val client    = SlackRtmClient(slackToken, new FiniteDuration(30, TimeUnit.SECONDS))
+    val apiClient = SlackApiClient(slackToken)
+    val selfId    = client.state.self.id
 
     client.onMessage { message =>
-      //      val isDirectMessage: Boolean = SlackUtil.isDirectMsg(message)
-      if (message.user != selfId)
-        client.sendMessage(
-          message.channel,
-          callCommand(parseCommand(message.text))
-        )
+      if (message.user != selfId) {
+        prevMessages get message.channel match {
+          case Some(msgId) => deletePreviousMessage(apiClient, message.channel, msgId.toString)
+          case None =>
+            () =>
+              0
+        }
+      }
+
+      val response = apiClient.postChatMessage(
+        message.channel,
+        callCommand(parseCommand(message.text))
+      )
+
+      response.map { res =>
+        prevMessages = prevMessages + (message.channel -> res)
+      }
     }
 
   }
+
+  def deletePreviousMessage(client: SlackApiClient, channel: String, ts: String): Future[Unit] =
+    client.deleteChat(channel, ts).map(res => println(res))
 
   def getPullRequests: List[PullRequest] = {
     val prFilters = List(PRFilterOpen, PRFilterSortPopularity)
@@ -61,7 +77,7 @@ object Bot {
   def buildReviewStateStr(r: Review): String = {
     val slots            = 2
     val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" else "⚪️") :: Nil
-    val tla = buildTechLeadApproval(r.techLeadApproval);
+    val tla              = buildTechLeadApproval(r.techLeadApproval);
     if (r.approved > slots - 1) {
       val approvals = List.fill(if (r.approved > slots) slots else r.approved)("✅")
       val changes   = List.fill(r.changes)("❌")
@@ -98,7 +114,8 @@ object Bot {
             a.title,
             filteredReviews.count(p => p.state == PRRStateApproved),
             filteredReviews.count(p => p.state == PRRStateChangesRequested),
-            filteredReviews.exists(fr => techLeads.contains(fr.user.get.login) && fr.state == PRRStateApproved),
+            filteredReviews.exists(fr =>
+              techLeads.contains(fr.user.get.login) && fr.state == PRRStateApproved),
             a.updated_at,
             a.created_at,
             a.closed_at,
