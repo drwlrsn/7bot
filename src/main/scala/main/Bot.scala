@@ -77,7 +77,9 @@ object Bot {
 
   def buildReviewStateStr(r: Review): String = {
     val slots            = 2
-    val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" else "⚪️") :: Nil
+    val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" 
+                            else if (r.labels.map(_.name).contains("QA not needed")) "🎨" 
+                            else "⚪️") :: Nil
     val tla              = buildTechLeadApproval(r.techLeadApproval);
     if (r.approved > slots - 1) {
       val approvals = List.fill(if (r.approved > slots) slots else r.approved)("✅")
