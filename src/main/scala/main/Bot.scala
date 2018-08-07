@@ -32,6 +32,12 @@ object Bot {
     val selfId    = client.state.self.id
 
     client.onMessage { message =>
+
+      val response = apiClient.postChatMessage(
+        message.channel,
+        callCommand(parseCommand(message.text))
+      )
+
       if (message.user != selfId) {
         prevMessages get message.channel match {
           case Some(msgId) => deletePreviousMessage(apiClient, message.channel, msgId.toString)
@@ -40,11 +46,6 @@ object Bot {
               0
         }
       }
-
-      val response = apiClient.postChatMessage(
-        message.channel,
-        callCommand(parseCommand(message.text))
-      )
 
       response.map { res =>
         prevMessages = prevMessages + (message.channel -> res)
