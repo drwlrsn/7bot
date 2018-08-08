@@ -79,6 +79,7 @@ object Bot {
     val slots            = 2
     val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" 
                             else if (r.labels.map(_.name).contains("QA not needed")) "🎨" 
+                            else if (r.labels.map(_.name).contains("QA fixes needed")) "❌"
                             else "⚪️") :: Nil
     val tla              = buildTechLeadApproval(r.techLeadApproval);
     if (r.approved > slots - 1) {
