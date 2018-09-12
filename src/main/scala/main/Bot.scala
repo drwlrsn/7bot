@@ -14,28 +14,41 @@ import slack.rtm.SlackRtmClient
 
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 
 object Bot {
-  val dmChannels: mutable.MutableList[String] = mutable.MutableList[String]()
-  val accessToken                             = sys.env("BOT_GITHUB_TOKEN")
-  val techLeads                               = List("padge", "unrolled", "raulchedrese")
-  var prevMessages: Map[String, String]       = Map()
-  implicit val system: ActorSystem            = ActorSystem("slack")
-  implicit val ec: ExecutionContextExecutor   = system.dispatcher
+  val dmChannels: mutable.MutableList[String]   = mutable.MutableList[String]()
+  val accessToken                               = sys.env("BOT_GITHUB_TOKEN")
+  val slackToken                                = sys.env("BOT_SLACK_TOKEN")
+  val techLeads                                 = List("padge", "unrolled", "raulchedrese")
+  val channelNameLabelMap: Map[String, String]  = Map("mystery_machine" -> "MysteryMachine", "triforce" -> "triforce", "synergyteam" -> "Synergy", "emoji" -> "emoji")
+  var channelIdLabelMap: Map[String, String]    = Map()
+  var prevMessages: Map[String, String]         = Map()
+  implicit val system: ActorSystem              = ActorSystem("slack")
+  val apiClient                                 = SlackApiClient(slackToken)
+  implicit val ec: ExecutionContextExecutor     = system.dispatcher
 
   def main(args: Array[String]): Unit = {
-    val slackToken = sys.env("BOT_SLACK_TOKEN")
-
     val client    = SlackRtmClient(slackToken, new FiniteDuration(30, TimeUnit.SECONDS))
-    val apiClient = SlackApiClient(slackToken)
     val selfId    = client.state.self.id
-
     client.onMessage { message =>
+      //Not sure if there is a way to limit how long the message stays.
+      client.indicateTyping(message.channel)
+      if (!channelIdLabelMap.contains(message.channel)) {
+        val chanFuture = apiClient.getChannelInfo(message.channel)
+        val chanRes = Await.result(chanFuture, new FiniteDuration(5, TimeUnit.SECONDS))
+        if (channelNameLabelMap.contains(chanRes.name)) {
+          channelIdLabelMap = channelIdLabelMap + (message.channel -> channelNameLabelMap(chanRes.name))
+        }
+      }
+
+      val label =
+        if (channelIdLabelMap contains message.channel) channelIdLabelMap get message.channel
+        else Option("")
 
       val response = apiClient.postChatMessage(
         message.channel,
-        callCommand(parseCommand(message.text))
+        callCommand(parseCommand(message.text), label.get)
       )
 
       if (message.user != selfId) {
@@ -81,7 +94,7 @@ object Bot {
                             else if (r.labels.map(_.name).contains("QA not needed")) "🎨" 
                             else if (r.labels.map(_.name).contains("QA fixes needed")) "❌"
                             else "⚪️") :: Nil
-    val tla              = buildTechLeadApproval(r.techLeadApproval);
+    val tla              = buildTechLeadApproval(r.techLeadApproval)
     if (r.approved > slots - 1) {
       val approvals = List.fill(if (r.approved > slots) slots else r.approved)("✅")
       val changes   = List.fill(r.changes)("❌")
@@ -146,6 +159,9 @@ object Bot {
     else buildReviews(as).mkString("\n")
 
   def getPullRequests(team: String): String = {
+    if (team.isEmpty) {
+      return "This channel is currently not mapped to a label"
+    }
     val listPullRequests = Github(Option(accessToken)).issues.searchIssues(
       "",
       List(
@@ -173,13 +189,8 @@ object Bot {
     }
   }
 
-  def callCommand(l: List[String]): String = l.head match {
-    case "!prs" => parseTeam(l.tail)
+  def callCommand(l: List[String], label: String): String = l.head match {
+    case "!prs" => getPullRequests(label)
     case _      => throw new IllegalArgumentException("Command not recognized.")
   }
-
-  def parseTeam(l: List[String]): String = l.head match {
-    case rest => getPullRequests(rest.split(" ")(0))
-  }
-
 }
