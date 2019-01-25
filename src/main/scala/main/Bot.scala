@@ -2,8 +2,8 @@ package main
 
 import java.text.DateFormat
 import java.time.Instant
-import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit
+import java.util.{Date, Locale}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
@@ -170,7 +170,7 @@ object Bot {
 
     listPullRequests.exec[cats.Id, HttpResponse[String]]() match {
       case Left(exception) => throw exception
-      case Right(r)        => buildPullRequests(r.result.items)
+      case Right(r)        => buildPullRequests(filterLabels(r.result.items))
     }
   }
 
@@ -192,5 +192,9 @@ object Bot {
   def parseTeam(l: List[String]): String = l.head match {
     case rest => getPullRequests(rest.split(" ")(0))
   }
+
+  def isNotOnHold(pr: Issue): Boolean = !pr.labels.exists(_.name.equalsIgnoreCase("on hold"))
+
+  def filterLabels(prs: List[Issue]): List[Issue] = prs.filter(isNotOnHold)
 
 }
