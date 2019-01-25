@@ -1,8 +1,12 @@
 package main
 
+import java.text.DateFormat
+import java.time.Instant
+import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.Uri
 import cats.Id
 import github4s.Github
 import github4s.Github._
@@ -32,7 +36,6 @@ object Bot {
     val selfId    = client.state.self.id
 
     client.onMessage { message =>
-
       val response = apiClient.postChatMessage(
         message.channel,
         callCommand(parseCommand(message.text))
@@ -78,7 +81,7 @@ object Bot {
   def buildReviewStateStr(r: Review): String = {
     val slots            = 2
     val qa: List[String] = (if (r.labels.map(_.name).contains("QA passed")) "🎨" 
-                            else if (r.labels.map(_.name).contains("QA not needed")) "🎨" 
+                            else if (r.labels.map(_.name).contains("QA not needed")) "🎨"
                             else if (r.labels.map(_.name).contains("QA fixes needed")) "❌"
                             else "⚪️") :: Nil
     val tla              = buildTechLeadApproval(r.techLeadApproval);
@@ -97,10 +100,18 @@ object Bot {
   def buildTitle(r: Review): String =
     if (r.labels.map(_.name).contains("PRIORITY")) "🚨 *" + r.title + "* 🚨" else r.title
 
+  def buildUrl(u: String): String = "<"  + u + "|PR #" + Uri(u).path.reverse.head.toString + ">"
+
+  def buildDate(d: String): String = {
+    val date = Date.from(Instant.parse(d))
+    val df = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.CANADA)
+    " _<!date^" + (date.toInstant.toEpochMilli / 1000).toString + "^(opened {date_short_pretty})|" + df.format(date) + ">_"
+  }
+
   def buildReviews(as: List[Issue]): List[String] =
     getReviews(as).foldLeft(List[String]())(
       (xs: List[String], r: Review) =>
-        (buildReviewStateStr(r) :: r.url :: " – " + buildTitle(r) :: Nil)
+        (buildReviewStateStr(r) :: buildUrl(r.url) :: buildDate(r.created_at) :: " – " + buildTitle(r) :: Nil)
           .mkString(" ") :: xs)
 
   private def getReviews(as: List[Issue]): List[Review] = {
